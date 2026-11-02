@@ -80,20 +80,28 @@ function targetJobId() {
   if (!/(^|\.)linkedin\.com$/i.test(url.hostname) || !url.pathname.startsWith("/jobs/")) {
     throw new Error("Use a LinkedIn URL whose path starts with /jobs/.");
   }
-  const queryId = url.searchParams.get("currentJobId") || url.searchParams.get("originToLandingJobPostings");
-  const pathMatch = url.pathname.match(/\/jobs\/view\/(\d+)/);
-  const id = queryId || pathMatch?.[1] || "";
-  if (!/^\d+$/.test(id)) throw new Error("I couldn't find a job ID in that URL. Try the Job ID option instead.");
-  return id;
+  const ids = jobIdsFromUrl(url);
+  if (ids.length !== 1) throw new Error("That URL has no single valid job ID. Use a LinkedIn job URL with one ID, or choose the Job ID option.");
+  return ids[0];
+}
+
+function jobIdsFromUrl(url) {
+  const hostname = url.hostname.toLowerCase();
+  if (!["linkedin.com", "www.linkedin.com"].includes(hostname) || !url.pathname.startsWith("/jobs/")) return [];
+  const candidates = [
+    ...url.searchParams.getAll("currentJobId"),
+    ...url.searchParams.getAll("originToLandingJobPostings"),
+  ];
+  const pathMatch = url.pathname.match(/^\/jobs\/view\/(\d+)(?:\/|$)/);
+  if (pathMatch) candidates.push(pathMatch[1]);
+  if (candidates.some((id) => !/^\d+$/.test(id))) return [];
+  const unique = [...new Set(candidates)];
+  return unique.length === 1 ? unique : [];
 }
 
 function idsFromUrl(text) {
   try {
-    const url = new URL(text);
-    const id = url.searchParams.get("currentJobId") || url.searchParams.get("originToLandingJobPostings");
-    if (id && /^\d+$/.test(id)) return [id];
-    const match = url.pathname.match(/\/jobs\/view\/(\d+)/);
-    return match ? [match[1]] : [];
+    return jobIdsFromUrl(new URL(text));
   } catch {
     return [];
   }
@@ -104,11 +112,13 @@ function recordJobIds(record) {
   const visited = new Set();
   function visit(value, key = "", inJobContext = false) {
     const normalizedKey = key.toLowerCase().replace(/[^a-z0-9]/g, "");
-    const referenceKey = /^(jobid|jobpostingid|postingid|joburl|joblink|postingurl|postinglink)$/.test(normalizedKey);
+    const referenceKey = /^(jobid|jobpostingid|postingid|joburl|joblink|jobpostingurl|jobpostinglink|postingurl|postinglink)$/.test(normalizedKey);
     const nestedJobContext = inJobContext || /^(job|jobposting|posting)$/.test(normalizedKey);
     if (typeof value === "string") {
       if ((referenceKey || (nestedJobContext && normalizedKey === "id")) && /^\d+$/.test(value.trim())) found.add(value.trim());
-      for (const id of idsFromUrl(value)) found.add(id);
+      if (referenceKey || nestedJobContext) {
+        for (const id of idsFromUrl(value)) found.add(id);
+      }
       return;
     }
     if (typeof value === "number" && Number.isSafeInteger(value) && (referenceKey || (nestedJobContext && normalizedKey === "id"))) {
@@ -127,14 +137,24 @@ function recordJobIds(record) {
   return [...found];
 }
 
-function snapshotRecords(payload) {
-  const elements = Array.isArray(payload?.elements) ? payload.elements : [];
+function snapshotRecords(payload, domain) {
+  if (!payload || typeof payload !== "object" || !Array.isArray(payload.elements)) {
+    throw new Error(`LinkedIn returned an unexpected response format for ${domain}. Check API access/version and try again.`);
+  }
+  const elements = payload.elements;
   const flattened = [];
   for (const element of elements) {
-    if (Array.isArray(element?.snapshotData)) {
-      for (const row of element.snapshotData) flattened.push({ snapshotDomain: element.snapshotDomain || "", data: row });
-    } else {
-      flattened.push(element);
+    if (!element || typeof element !== "object" || !Array.isArray(element.snapshotData)) {
+      throw new Error(`LinkedIn returned an unexpected response format for ${domain}. Check API access/version and try again.`);
+    }
+    if (element.snapshotDomain && element.snapshotDomain !== domain) {
+      throw new Error(`LinkedIn returned data for an unexpected domain while requesting ${domain}.`);
+    }
+    for (const row of element.snapshotData) {
+      if (!row || typeof row !== "object") {
+        throw new Error(`LinkedIn returned an unexpected response format for ${domain}. Check API access/version and try again.`);
+      }
+      flattened.push({ snapshotDomain: element.snapshotDomain || domain, data: row });
     }
   }
   return flattened;
@@ -150,7 +170,7 @@ async function fetchDomain(domain) {
     if (seen.has(key)) throw new Error(`LinkedIn returned a repeated page for ${domain}; stopped pagination safely.`);
     seen.add(key);
     const payload = await api("/api/snapshot", { method: "POST", body: JSON.stringify({ domain, start, count }) });
-    output.push(...snapshotRecords(payload));
+    output.push(...snapshotRecords(payload, domain));
     const next = Array.isArray(payload?.paging?.links) ? payload.paging.links.find((link) => link.rel === "next") : null;
     if (!next?.href) return output;
     const nextUrl = new URL(next.href, "https://api.linkedin.com");
