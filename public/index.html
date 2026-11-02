@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#f5f7fb">
+    <title>LinkedIn Easy Apply Retriever</title>
+    <link rel="stylesheet" href="/styles.css">
+    <script src="/app.js" defer></script>
+  </head>
+  <body>
+    <main class="shell">
+      <header class="topbar">
+        <a class="brand" href="/" aria-label="LinkedIn Easy Apply Retriever home">
+          <span class="brand-mark" aria-hidden="true">in</span>
+          <span>Application answer lookup</span>
+        </a>
+        <span class="local-badge"><span class="dot"></span> Runs on this computer</span>
+      </header>
+
+      <section class="intro">
+        <p class="eyebrow">YOUR LINKEDIN DATA</p>
+        <h1>Find an Easy Apply response</h1>
+        <p class="lede">Look up application records and saved screening answers for one job. The app keeps your access token and returned data in memory while it runs.</p>
+      </section>
+
+      <section class="card auth-card" aria-labelledby="auth-title">
+        <div class="section-heading">
+          <div>
+            <p class="step-label">STEP 1</p>
+            <h2 id="auth-title">Connect to LinkedIn</h2>
+          </div>
+          <span id="auth-pill" class="status-pill status-offline">Not connected</span>
+        </div>
+        <p class="muted">Sign in through LinkedIn in your browser, or paste a token if native OAuth is not enabled for your developer app.</p>
+        <div class="auth-actions">
+          <button id="connect-button" class="button button-primary" type="button">Connect with LinkedIn</button>
+          <button id="disconnect-button" class="button button-secondary" type="button" hidden>Disconnect</button>
+        </div>
+        <p id="client-config-note" class="inline-note" hidden>Set your LinkedIn Client ID in the local <code>.env</code> file before connecting.</p>
+        <a id="oauth-link" class="oauth-link" href="#" target="_blank" rel="noopener noreferrer" hidden>Continue to LinkedIn in your browser ↗</a>
+        <p id="auth-message" class="message" role="status" aria-live="polite"></p>
+
+        <details class="fallback">
+          <summary>Use a token instead</summary>
+          <div class="details-body">
+            <label for="token-input">LinkedIn access token</label>
+            <div class="token-row">
+              <input id="token-input" type="password" autocomplete="off" spellcheck="false" placeholder="Paste token here">
+              <button id="token-button" class="button button-secondary" type="button">Use token</button>
+            </div>
+            <p class="small muted">The token is sent only to this local app and stays in memory until you disconnect or stop the server.</p>
+          </div>
+        </details>
+
+        <details class="setup-guide">
+          <summary>First time? Set up your LinkedIn developer app</summary>
+          <div class="details-body guide-content">
+            <p>LinkedIn restricts its Member Data Portability API to eligible members in the European Economic Area or Switzerland. You also need LinkedIn to enable the API product and native PKCE for your developer app before the sign-in button can work.</p>
+            <ol>
+              <li><a href="https://learn.microsoft.com/en-us/linkedin/dma/member-data-portability/member-data-portability-member/" target="_blank" rel="noopener noreferrer">Read LinkedIn's Member Data Portability (Member) setup guide</a>.</li>
+              <li><a href="https://www.linkedin.com/developers/apps" target="_blank" rel="noopener noreferrer">Create a LinkedIn developer app</a> using LinkedIn's designated Member Data Portability default company page. The guide warns not to create a new company page for this product.</li>
+              <li>In the app's Products tab, request <strong>Member Data Portability API (Member)</strong> and accept the terms.</li>
+              <li>Ask your LinkedIn point of contact to enable native PKCE for the app. Add its API Key (Client ID) to <code>.env</code> as <code>LINKEDIN_CLIENT_ID=…</code>, then restart this app.</li>
+              <li>Click <strong>Connect with LinkedIn</strong> and approve the <code>r_dma_portability_self_serve</code> permission in LinkedIn.</li>
+            </ol>
+            <p><strong>If LinkedIn has not enabled PKCE:</strong> use the <a href="https://learn.microsoft.com/en-us/linkedin/shared/authentication/developer-portal-tools" target="_blank" rel="noopener noreferrer">Developer Portal OAuth Token Tools</a>. Choose your app and OAuth flow, request <code>r_dma_portability_self_serve</code>, approve the request, then paste the generated token above.</p>
+            <p class="small muted">LinkedIn's current native OAuth guide: <a href="https://learn.microsoft.com/en-us/linkedin/shared/authentication/authorization-code-flow-native" target="_blank" rel="noopener noreferrer">Authorization Code Flow for Native Apps</a>. The API may not return every historical answer or link every saved response to a particular job.</p>
+          </div>
+        </details>
+      </section>
+
+      <section class="card lookup-card" aria-labelledby="lookup-title">
+        <div class="section-heading">
+          <div>
+            <p class="step-label">STEP 2</p>
+            <h2 id="lookup-title">Choose the job</h2>
+          </div>
+          <span class="section-index">01 / 02</span>
+        </div>
+        <p class="muted">Enter a job ID or paste a LinkedIn job-post URL. No job is selected for you.</p>
+        <fieldset class="target-modes">
+          <legend class="visually-hidden">Job reference type</legend>
+          <label class="mode-option"><input type="radio" name="target-mode" value="id" checked><span>Job ID</span></label>
+          <label class="mode-option"><input type="radio" name="target-mode" value="url"><span>Job-post URL</span></label>
+        </fieldset>
+        <div id="id-field" class="field-group">
+          <label for="job-id">LinkedIn job ID</label>
+          <input id="job-id" type="text" inputmode="numeric" autocomplete="off" placeholder="For example, 4480997136">
+          <p class="field-hint">Usually visible as <code>currentJobId=…</code> in the job URL.</p>
+        </div>
+        <div id="url-field" class="field-group" hidden>
+          <label for="job-url">LinkedIn job-post URL</label>
+          <input id="job-url" type="url" inputmode="url" autocomplete="url" placeholder="https://www.linkedin.com/jobs/view/…">
+          <p class="field-hint">The URL must contain a job ID, such as <code>currentJobId</code> or <code>/jobs/view/…</code>.</p>
+        </div>
+        <button id="search-button" class="button button-primary button-wide" type="button">Find application answers</button>
+        <p id="lookup-message" class="message" role="status" aria-live="polite"></p>
+      </section>
+
+      <section id="results" class="results" aria-live="polite" hidden></section>
+
+      <footer class="footer">
+        <span>Local-only lookup · No archive download</span>
+        <a href="https://github.com/gabrielmadirolas/linkedin-easy-apply-retriever" target="_blank" rel="noopener noreferrer">Source on GitHub ↗</a>
+      </footer>
+    </main>
+  </body>
+</html>
