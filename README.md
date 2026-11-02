@@ -10,7 +10,13 @@ A local tool to look up your LinkedIn job application records and saved screenin
 
 ## Start the app
 
-Copy .env.example to .env and set `LINKEDIN_CLIENT_ID` to your app's API Key (Client ID, not a client secret). Then run:
+From the repository directory, copy the example configuration:
+
+```sh
+cp .env.example .env
+```
+
+Edit `.env` and set `LINKEDIN_CLIENT_ID` to your app's API Key (Client ID, not a client secret). Then start the app:
 
 ```sh
 npm start
