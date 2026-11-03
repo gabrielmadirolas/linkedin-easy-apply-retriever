@@ -106,13 +106,8 @@ function readEnvTokens() {
   }));
 }
 
-function readLegacyTokenFile() {
-  const token = readFileIfSmall(path.join(ROOT, "token"), MAX_TOKEN_LENGTH).trim();
-  return isValidToken(token) ? [{ id: "file:token", label: "token file (legacy)", token }] : [];
-}
-
 function getSavedTokens() {
-  return [...readEnvTokens(), ...readLegacyTokenFile()];
+  return readEnvTokens();
 }
 
 function statusPayload() {

@@ -30,7 +30,7 @@ The token's details page shows its time to live. When LinkedIn rejects an expire
 
 ## Reuse a locally saved token
 
-The app checks the repository root for a conventional `.env` file and for the legacy plain-text file named `token`. It never loads a saved token without asking first. If it finds one, choose **Use saved token** or **Not now**; if it finds multiple, select the one to use. The token values are never displayed in the page.
+The app checks the repository root for a conventional `.env` file. It never loads a saved token without asking first. If it finds one, choose **Use saved token** or **Not now**; if it finds multiple, select the one to use. The token values are never displayed in the page.
 
 Prefer `.env` for local secrets. Store one token like this:
 
@@ -45,7 +45,7 @@ LINKEDIN_ACCESS_TOKEN_PERSONAL=your_first_access_token
 LINKEDIN_ACCESS_TOKEN_WORK=your_second_access_token
 ```
 
-The `.env` file and the temporary `token` file are ignored by Git. The app reads only these known locations; it does not scan other repository files for strings that look like tokens. A selected token is held in server memory only until you disconnect or stop the app.
+The `.env` file is ignored by Git. The app does not scan other repository files for strings that look like tokens. A selected token is held in server memory only until you disconnect or stop the app.
 
 ## Look up an application
 
