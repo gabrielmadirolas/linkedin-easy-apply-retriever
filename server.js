@@ -6,9 +6,11 @@ import { fileURLToPath } from "node:url";
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC = path.join(ROOT, "public");
 const API_DOMAINS = new Set(["JOB_APPLICATIONS", "TALENT_QUESTION_SAVED_RESPONSE"]);
+const TOKEN_KEY_PATTERN = /^LINKEDIN_ACCESS_TOKEN(?:_[A-Z0-9_]+)?$/i;
 const MAX_BODY = 64 * 1024;
 const MAX_COUNT = 100;
 const MAX_START = 1_000_000;
+const MAX_TOKEN_LENGTH = 10_000;
 
 let serverPort = 0;
 let accessToken = "";
@@ -66,11 +68,59 @@ function currentToken() {
   return accessToken;
 }
 
+function isValidToken(value) {
+  return typeof value === "string" && value.length > 0 && value.length <= MAX_TOKEN_LENGTH && !/\s/.test(value);
+}
+
+function readFileIfSmall(filePath, maxBytes) {
+  try {
+    const stats = fs.statSync(filePath);
+    if (!stats.isFile() || stats.size > maxBytes) return "";
+    return fs.readFileSync(filePath, "utf8");
+  } catch {
+    return "";
+  }
+}
+
+function parseEnvValue(raw) {
+  const value = raw.trim();
+  if (value.length >= 2 && ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'")))) {
+    return value.slice(1, -1);
+  }
+  return value.replace(/\s+#.*$/, "").trim();
+}
+
+function readEnvTokens() {
+  const contents = readFileIfSmall(path.join(ROOT, ".env"), 64 * 1024);
+  const values = new Map();
+  for (const line of contents.split(/\r?\n/)) {
+    const match = line.match(/^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$/);
+    if (!match || !TOKEN_KEY_PATTERN.test(match[1])) continue;
+    const token = parseEnvValue(match[2]);
+    if (isValidToken(token)) values.set(match[1], token);
+  }
+  return [...values.entries()].map(([key, token]) => ({
+    id: `env:${key}`,
+    label: key === "LINKEDIN_ACCESS_TOKEN" ? ".env — default token" : `.env — ${key.slice("LINKEDIN_ACCESS_TOKEN_".length)}`,
+    token,
+  }));
+}
+
+function readLegacyTokenFile() {
+  const token = readFileIfSmall(path.join(ROOT, "token"), MAX_TOKEN_LENGTH).trim();
+  return isValidToken(token) ? [{ id: "file:token", label: "token file (legacy)", token }] : [];
+}
+
+function getSavedTokens() {
+  return [...readEnvTokens(), ...readLegacyTokenFile()];
+}
+
 function statusPayload() {
   const token = currentToken();
   return {
     authenticated: Boolean(token),
     notice: authNotice,
+    savedTokens: token ? [] : getSavedTokens().map(({ id, label }) => ({ id, label })),
   };
 }
 
@@ -113,11 +163,19 @@ const app = http.createServer(async (req, res) => {
 
   if (url.pathname === "/api/token") {
     const token = typeof input.token === "string" ? input.token.trim() : "";
-    if (!token || token.length > 10_000 || /\s/.test(token)) {
+    if (!isValidToken(token)) {
       return sendJson(res, 400, { error: "Paste a valid access token without spaces or line breaks." });
     }
     accessToken = token;
     authNotice = "Token accepted for this app session only.";
+    return sendJson(res, 200, statusPayload());
+  }
+
+  if (url.pathname === "/api/token/use-saved") {
+    const saved = getSavedTokens().find(({ id }) => id === input.id);
+    if (!saved) return sendJson(res, 404, { error: "That saved token is no longer available. Refresh the page and choose again." });
+    accessToken = saved.token;
+    authNotice = `Saved token from ${saved.label} loaded for this app session only.`;
     return sendJson(res, 200, statusPayload());
   }
 

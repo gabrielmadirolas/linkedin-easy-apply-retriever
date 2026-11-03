@@ -1,4 +1,5 @@
 .env
+token
 AGENTS.md
 node_modules/
 npm-debug.log*
