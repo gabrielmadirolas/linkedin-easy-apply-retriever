@@ -40,7 +40,7 @@ h1 { margin: 0; font-size: clamp(29px, 5vw, 42px); letter-spacing: -.04em; line-
 .auth-actions { display: flex; flex-wrap: wrap; gap: 10px; }
 .button { display: inline-flex; align-items: center; justify-content: center; min-height: 42px; border: 1px solid transparent; border-radius: 9px; padding: 0 16px; font-size: 14px; font-weight: 700; cursor: pointer; transition: background .15s ease, transform .15s ease; }
 .button:hover { transform: translateY(-1px); }
-.button:focus-visible, input:focus-visible, summary:focus-visible, a:focus-visible { outline: 3px solid rgb(10 102 194 / 24%); outline-offset: 2px; }
+.button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visible, a:focus-visible { outline: 3px solid rgb(10 102 194 / 24%); outline-offset: 2px; }
 .button:disabled { opacity: .58; cursor: wait; transform: none; }
 .button-primary { background: var(--blue); color: white; }
 .button-primary:hover { background: var(--blue-dark); }
@@ -61,6 +61,10 @@ input[type="text"], input[type="url"], input[type="password"] { display: block; 
 input::placeholder { color: #98a5b5; }
 .token-row { display: flex; gap: 10px; }
 .token-row input { flex: 1; min-width: 0; }
+.saved-token-prompt { margin: 14px 0 4px; padding: 13px; border: 1px solid #c9d9eb; border-radius: 10px; background: var(--pale-blue); }
+.saved-token-prompt p { margin: 0 0 10px; color: var(--ink); }
+.saved-token-prompt select { display: block; width: 100%; min-height: 42px; margin: 0 0 10px; padding: 8px 10px; border: 1px solid #cbd4e0; border-radius: 8px; background: white; color: var(--ink); font: inherit; }
+.saved-token-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .small { font-size: 12px; }
 .auth-card .small { margin: 9px 0 0; }
 .guide-content { font-size: 13px; line-height: 1.55; color: #43536a; }

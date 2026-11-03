@@ -3,10 +3,51 @@ const statusPill = $("#auth-pill");
 const authMessage = $("#auth-message");
 const lookupMessage = $("#lookup-message");
 const results = $("#results");
+let savedTokenOptions = [];
+let savedTokenPromptDismissed = false;
 
 function setMessage(node, message, kind = "") {
   node.textContent = message;
   node.className = `message${kind ? ` ${kind}` : ""}`;
+}
+
+function showSavedTokenPrompt(options, authenticated) {
+  const prompt = $("#saved-token-prompt");
+  savedTokenOptions = Array.isArray(options) ? options : [];
+  if (authenticated || savedTokenPromptDismissed || savedTokenOptions.length === 0) {
+    prompt.hidden = true;
+    return;
+  }
+
+  const choiceLabel = $("#saved-token-choice-label");
+  const choice = $("#saved-token-choice");
+  const useButton = $("#use-saved-token-button");
+  const message = $("#saved-token-prompt-message");
+  choice.replaceChildren();
+
+  if (savedTokenOptions.length === 1) {
+    message.textContent = `A saved access token was found in ${savedTokenOptions[0].label}. Would you like to use it for this session?`;
+    choiceLabel.hidden = true;
+    choice.hidden = true;
+    useButton.textContent = "Use saved token";
+  } else {
+    message.textContent = `Found ${savedTokenOptions.length} saved access tokens. Choose which one to use for this session.`;
+    choiceLabel.hidden = false;
+    choice.hidden = false;
+    useButton.textContent = "Use selected token";
+
+    const placeholder = document.createElement("option");
+    placeholder.value = "";
+    placeholder.textContent = "Choose a saved token";
+    choice.append(placeholder);
+    for (const option of savedTokenOptions) {
+      const item = document.createElement("option");
+      item.value = option.id;
+      item.textContent = option.label;
+      choice.append(item);
+    }
+  }
+  prompt.hidden = false;
 }
 
 async function api(path, options = {}) {
@@ -30,6 +71,7 @@ function setAuthStatus(info) {
   statusPill.textContent = authenticated ? "Token ready" : "Token needed";
   statusPill.className = `status-pill ${authenticated ? "status-online" : "status-offline"}`;
   $("#disconnect-button").hidden = !authenticated;
+  showSavedTokenPrompt(info.savedTokens, authenticated);
   if (info.notice) setMessage(authMessage, info.notice, authenticated ? "success" : "");
   else if (authenticated) setMessage(authMessage, "Your token is ready for this session and is held in memory only.", "success");
 }
@@ -288,6 +330,25 @@ $("#token-button").addEventListener("click", async () => {
   } catch (error) {
     setMessage(authMessage, error.message, "error");
   }
+});
+
+$("#use-saved-token-button").addEventListener("click", async () => {
+  const id = savedTokenOptions.length === 1 ? savedTokenOptions[0].id : $("#saved-token-choice").value;
+  if (!id) return setMessage(authMessage, "Choose one of the saved tokens first.", "error");
+  const button = $("#use-saved-token-button");
+  button.disabled = true;
+  try {
+    setAuthStatus(await api("/api/token/use-saved", { method: "POST", body: JSON.stringify({ id }) }));
+  } catch (error) {
+    setMessage(authMessage, error.message, "error");
+  } finally {
+    button.disabled = false;
+  }
+});
+
+$("#skip-saved-token-button").addEventListener("click", () => {
+  savedTokenPromptDismissed = true;
+  $("#saved-token-prompt").hidden = true;
 });
 
 $("#disconnect-button").addEventListener("click", async () => {

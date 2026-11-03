@@ -32,7 +32,16 @@
           </div>
           <span id="auth-pill" class="status-pill status-offline">Token needed</span>
         </div>
-        <p class="muted">Generate an access token with LinkedIn's Developer Portal OAuth Token Tools, then paste it here. This app does not need a redirect URL or PKCE setup.</p>
+        <p class="muted">Generate an access token with LinkedIn's Developer Portal OAuth Token Tools, then paste it here. If a token is saved in the local <code>.env</code> or legacy <code>token</code> file, the app will ask before using it. This app does not need a redirect URL or PKCE setup.</p>
+        <div id="saved-token-prompt" class="saved-token-prompt" hidden>
+          <p id="saved-token-prompt-message" class="small" role="status" aria-live="polite"></p>
+          <label id="saved-token-choice-label" for="saved-token-choice" hidden>Choose a saved token</label>
+          <select id="saved-token-choice" hidden></select>
+          <div class="saved-token-actions">
+            <button id="use-saved-token-button" class="button button-secondary" type="button">Use saved token</button>
+            <button id="skip-saved-token-button" class="button button-secondary" type="button">Not now</button>
+          </div>
+        </div>
         <div class="details-body">
           <label for="token-input">LinkedIn access token</label>
           <div class="token-row">
