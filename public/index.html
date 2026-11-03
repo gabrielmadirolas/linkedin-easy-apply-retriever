@@ -28,44 +28,37 @@
         <div class="section-heading">
           <div>
             <p class="step-label">STEP 1</p>
-            <h2 id="auth-title">Connect to LinkedIn</h2>
+            <h2 id="auth-title">Add your LinkedIn token</h2>
           </div>
-          <span id="auth-pill" class="status-pill status-offline">Not connected</span>
+          <span id="auth-pill" class="status-pill status-offline">Token needed</span>
         </div>
-        <p class="muted">Sign in through LinkedIn in your browser, or paste a token if native OAuth is not enabled for your developer app.</p>
+        <p class="muted">Generate an access token with LinkedIn's Developer Portal OAuth Token Tools, then paste it here. This app does not need a redirect URL or PKCE setup.</p>
+        <div class="details-body">
+          <label for="token-input">LinkedIn access token</label>
+          <div class="token-row">
+            <input id="token-input" type="password" autocomplete="off" spellcheck="false" placeholder="Paste token here">
+            <button id="token-button" class="button button-primary" type="button">Use token</button>
+          </div>
+          <p class="small muted">The token is sent only to this local app and stays in memory until you disconnect or stop the server.</p>
+        </div>
         <div class="auth-actions">
-          <button id="connect-button" class="button button-primary" type="button">Connect with LinkedIn</button>
           <button id="disconnect-button" class="button button-secondary" type="button" hidden>Disconnect</button>
         </div>
-        <p id="client-config-note" class="inline-note" hidden>Set your LinkedIn Client ID in the local <code>.env</code> file before connecting.</p>
-        <a id="oauth-link" class="oauth-link" href="#" target="_blank" rel="noopener noreferrer" hidden>Continue to LinkedIn in your browser ↗</a>
         <p id="auth-message" class="message" role="status" aria-live="polite"></p>
-
-        <details class="fallback">
-          <summary>Use a token instead</summary>
-          <div class="details-body">
-            <label for="token-input">LinkedIn access token</label>
-            <div class="token-row">
-              <input id="token-input" type="password" autocomplete="off" spellcheck="false" placeholder="Paste token here">
-              <button id="token-button" class="button button-secondary" type="button">Use token</button>
-            </div>
-            <p class="small muted">The token is sent only to this local app and stays in memory until you disconnect or stop the server.</p>
-          </div>
-        </details>
 
         <details class="setup-guide">
           <summary>First time? Set up your LinkedIn developer app</summary>
           <div class="details-body guide-content">
-            <p>LinkedIn restricts its Member Data Portability API to eligible members in the European Economic Area or Switzerland. You also need LinkedIn to enable the API product and native PKCE for your developer app before the sign-in button can work.</p>
+            <p>LinkedIn restricts its Member Data Portability API to eligible members in the European Economic Area or Switzerland. You need a developer app with this API product before generating a token.</p>
             <ol>
               <li><a href="https://learn.microsoft.com/en-us/linkedin/dma/member-data-portability/member-data-portability-member/" target="_blank" rel="noopener noreferrer">Read LinkedIn's Member Data Portability (Member) setup guide</a>.</li>
-              <li><a href="https://www.linkedin.com/developers/apps" target="_blank" rel="noopener noreferrer">Create a LinkedIn developer app</a> using LinkedIn's designated Member Data Portability default company page. The guide warns not to create a new company page for this product.</li>
-              <li>In the app's Products tab, request <strong>Member Data Portability API (Member)</strong> and accept the terms.</li>
-              <li>Ask your LinkedIn point of contact to enable native PKCE for the app. Add its API Key (Client ID) to <code>.env</code> as <code>LINKEDIN_CLIENT_ID=…</code>, then restart this app.</li>
-              <li>Click <strong>Connect with LinkedIn</strong> and approve the <code>r_dma_portability_self_serve</code> permission in LinkedIn.</li>
+              <li><a href="https://www.linkedin.com/developers/apps/new?src=re-other&amp;veh=learn.microsoft.com" target="_blank" rel="noopener noreferrer">Create a LinkedIn developer app</a> using LinkedIn's designated Member Data Portability default company page. Do not create a new company page for this product.</li>
+              <li>In the app's Products tab, request <strong>Member Data Portability API (Member)</strong> and accept the terms. Wait until the app is provisioned with the product.</li>
+              <li>Open <strong>Docs and tools → OAuth Token Tools</strong> in the Developer Portal and choose <strong>Create token</strong>. See LinkedIn's <a href="https://learn.microsoft.com/en-us/linkedin/shared/authentication/developer-portal-tools" target="_blank" rel="noopener noreferrer">token-generator instructions</a> if needed.</li>
+              <li>Select your provisioned app and the <code>r_dma_portability_self_serve</code> scope, request an access token, then sign in and approve the consent screen.</li>
+              <li>Copy the generated token and paste it into the field above.</li>
             </ol>
-            <p><strong>If LinkedIn has not enabled PKCE:</strong> use the <a href="https://learn.microsoft.com/en-us/linkedin/shared/authentication/developer-portal-tools" target="_blank" rel="noopener noreferrer">Developer Portal OAuth Token Tools</a>. Choose your app and OAuth flow, request <code>r_dma_portability_self_serve</code>, approve the request, then paste the generated token above.</p>
-            <p class="small muted">LinkedIn's current native OAuth guide: <a href="https://learn.microsoft.com/en-us/linkedin/shared/authentication/authorization-code-flow-native" target="_blank" rel="noopener noreferrer">Authorization Code Flow for Native Apps</a>. The API may not return every historical answer or link every saved response to a particular job.</p>
+            <p class="small muted">You do not need to configure a redirect URL or PKCE for this token-generator flow. LinkedIn may not return every historical answer or link every saved response to a particular job.</p>
           </div>
         </details>
       </section>

@@ -53,8 +53,7 @@ h1 { margin: 0; font-size: clamp(29px, 5vw, 42px); letter-spacing: -.04em; line-
 .message:empty { display: none; }
 .message.error { color: var(--red); }
 .message.success { color: var(--green); }
-.oauth-link { display: inline-block; margin-top: 12px; font-size: 14px; font-weight: 650; }
-.fallback, .setup-guide { margin-top: 16px; border-top: 1px solid var(--line); padding-top: 15px; }
+.setup-guide { margin-top: 16px; border-top: 1px solid var(--line); padding-top: 15px; }
 summary { color: var(--ink); font-size: 14px; font-weight: 700; cursor: pointer; }
 .details-body { padding: 14px 0 0; }
 label { display: block; margin-bottom: 7px; font-size: 13px; font-weight: 700; }
@@ -63,7 +62,7 @@ input::placeholder { color: #98a5b5; }
 .token-row { display: flex; gap: 10px; }
 .token-row input { flex: 1; min-width: 0; }
 .small { font-size: 12px; }
-.fallback .small { margin: 9px 0 0; }
+.auth-card .small { margin: 9px 0 0; }
 .guide-content { font-size: 13px; line-height: 1.55; color: #43536a; }
 .guide-content p { margin: 0 0 12px; }
 .guide-content ol { margin: 10px 0 14px; padding-left: 21px; }

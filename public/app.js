@@ -3,7 +3,6 @@ const statusPill = $("#auth-pill");
 const authMessage = $("#auth-message");
 const lookupMessage = $("#lookup-message");
 const results = $("#results");
-let pollTimer = null;
 
 function setMessage(node, message, kind = "") {
   node.textContent = message;
@@ -28,14 +27,11 @@ async function api(path, options = {}) {
 
 function setAuthStatus(info) {
   const authenticated = Boolean(info.authenticated);
-  statusPill.textContent = authenticated ? "Connected" : "Not connected";
+  statusPill.textContent = authenticated ? "Token ready" : "Token needed";
   statusPill.className = `status-pill ${authenticated ? "status-online" : "status-offline"}`;
   $("#disconnect-button").hidden = !authenticated;
-  $("#connect-button").disabled = !info.clientIdConfigured || authenticated;
-  $("#client-config-note").hidden = Boolean(info.clientIdConfigured);
-  if (authenticated || !info.oauthPending) $("#oauth-link").hidden = true;
   if (info.notice) setMessage(authMessage, info.notice, authenticated ? "success" : "");
-  else if (authenticated) setMessage(authMessage, `Connected by ${info.method === "oauth" ? "LinkedIn sign-in" : "pasted token"}. Token is held in memory only.`, "success");
+  else if (authenticated) setMessage(authMessage, "Your token is ready for this session and is held in memory only.", "success");
 }
 
 async function refreshStatus() {
@@ -47,20 +43,6 @@ async function refreshStatus() {
     setMessage(authMessage, error.message, "error");
     return null;
   }
-}
-
-function startPolling() {
-  if (pollTimer) clearInterval(pollTimer);
-  let ticks = 0;
-  pollTimer = setInterval(async () => {
-    ticks += 1;
-    const info = await refreshStatus();
-    if (info?.authenticated || ticks >= 300) {
-      clearInterval(pollTimer);
-      pollTimer = null;
-      if (!info?.authenticated && ticks >= 300) setMessage(authMessage, "The sign-in wait expired. Try again or use the token-paste fallback.", "error");
-    }
-  }, 2000);
 }
 
 function targetJobId() {
@@ -273,7 +255,7 @@ async function runLookup() {
     return setMessage(lookupMessage, error.message, "error");
   }
   const auth = await api("/api/auth/status").catch(() => null);
-  if (!auth?.authenticated) return setMessage(lookupMessage, "Connect to LinkedIn before searching.", "error");
+  if (!auth?.authenticated) return setMessage(lookupMessage, "Add a LinkedIn access token before searching.", "error");
 
   const button = $("#search-button");
   button.disabled = true;
@@ -295,21 +277,6 @@ async function runLookup() {
   }
 }
 
-$("#connect-button").addEventListener("click", async () => {
-  setMessage(authMessage, "Preparing LinkedIn sign-in…");
-  try {
-    const { authorizationUrl } = await api("/api/oauth/start", { method: "POST", body: "{}" });
-    const link = $("#oauth-link");
-    link.href = authorizationUrl;
-    link.hidden = false;
-    link.textContent = "Continue to LinkedIn in your browser ↗";
-    setMessage(authMessage, "Select the link to approve access in LinkedIn. This app requests only the Member Data Portability self-service scope.");
-    startPolling();
-  } catch (error) {
-    setMessage(authMessage, error.message, "error");
-  }
-});
-
 $("#token-button").addEventListener("click", async () => {
   const input = $("#token-input");
   const token = input.value.trim();
@@ -317,7 +284,6 @@ $("#token-button").addEventListener("click", async () => {
   try {
     const status = await api("/api/token", { method: "POST", body: JSON.stringify({ token }) });
     input.value = "";
-    $("#oauth-link").hidden = true;
     setAuthStatus(status);
   } catch (error) {
     setMessage(authMessage, error.message, "error");
@@ -330,7 +296,6 @@ $("#disconnect-button").addEventListener("click", async () => {
     $("#token-input").value = "";
     results.replaceChildren();
     results.hidden = true;
-    $("#oauth-link").hidden = true;
   } catch (error) {
     setMessage(authMessage, error.message, "error");
   }
