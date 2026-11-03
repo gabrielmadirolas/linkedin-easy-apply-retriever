@@ -10,14 +10,6 @@ A local tool to look up your LinkedIn job application records and saved screenin
 
 ## Start the app
 
-From the repository directory, copy the example configuration:
-
-```sh
-cp .env.example .env
-```
-
-Edit `.env` and set `LINKEDIN_CLIENT_ID` to your app's API Key (Client ID, not a client secret). Then start the app:
-
 ```sh
 npm start
 ```
@@ -26,12 +18,15 @@ Open the `http://127.0.0.1:<port>` address printed in the terminal.
 
 ## LinkedIn setup
 
-1. Follow LinkedIn's [Member Data Portability (Member) guide](https://learn.microsoft.com/en-us/linkedin/dma/member-data-portability/member-data-portability-member/). This API is for members in the EEA and Switzerland.
-2. In the [Developer Portal](https://www.linkedin.com/developers/apps), create an app using LinkedIn's designated default company page for this product, then request the **Member Data Portability API (Member)** product.
-3. Ask your LinkedIn point of contact to enable native PKCE, as described in the [native OAuth guide](https://learn.microsoft.com/en-us/linkedin/shared/authentication/authorization-code-flow-native). Set the Client ID in .env and restart.
-4. Choose **Connect with LinkedIn** and approve the `r_dma_portability_self_serve` scope.
+The app uses a token you generate manually with LinkedIn's Developer Portal. It does not perform OAuth sign-in itself, so no redirect URL or PKCE setup is required.
 
-If PKCE is not enabled, use LinkedIn's [OAuth Token Tools](https://learn.microsoft.com/en-us/linkedin/shared/authentication/developer-portal-tools) to generate a token with the same scope, then paste it into **Use a token instead**.
+1. Follow LinkedIn's [Member Data Portability (Member) guide](https://learn.microsoft.com/en-us/linkedin/dma/member-data-portability/member-data-portability-member/). This API is available to eligible members in the EEA and Switzerland.
+2. In the [Developer Portal](https://www.linkedin.com/developers/apps/new?src=re-other&veh=learn.microsoft.com), create an app using LinkedIn's designated default company page for this product. Do not create a new company page for it.
+3. In your app's Products tab, request **Member Data Portability API (Member)** and accept the terms. Continue after the product is provisioned for your app.
+4. Open **Docs and tools → OAuth Token Tools**, choose **Create token**, select your provisioned app, and request the `r_dma_portability_self_serve` scope.
+5. Sign in to LinkedIn and approve the consent screen. Copy the generated token and paste it into the app.
+
+The token's details page shows its time to live. When LinkedIn rejects an expired token, generate a new one and paste it again.
 
 ## Look up an application
 
@@ -39,4 +34,4 @@ Choose a job ID or LinkedIn job-post URL; no job is preselected. The app queries
 
 ## Privacy
 
-The server listens only on your computer's loopback interface. Tokens and temporary OAuth data stay in memory and are cleared when you disconnect or stop the server. Search results stay in the current page. Never commit a LinkedIn token, client secret, or personal application data; .env is ignored by Git.
+The server listens only on your computer's loopback interface. The pasted access token stays in server memory and is cleared when you disconnect or stop the server. Search results stay in the current page. Never commit a LinkedIn token, client secret, or personal application data.
