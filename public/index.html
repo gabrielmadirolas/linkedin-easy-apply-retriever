@@ -80,21 +80,14 @@
           </div>
           <span class="section-index">01 / 02</span>
         </div>
-        <p class="muted">Enter a job ID or paste a LinkedIn job-post URL. No job is selected for you.</p>
-        <fieldset class="target-modes">
-          <legend class="visually-hidden">Job reference type</legend>
-          <label class="mode-option"><input type="radio" name="target-mode" value="id" checked><span>Job ID</span></label>
-          <label class="mode-option"><input type="radio" name="target-mode" value="url"><span>Job-post URL</span></label>
-        </fieldset>
-        <div id="id-field" class="field-group">
-          <label for="job-id">LinkedIn job ID</label>
-          <input id="job-id" type="text" inputmode="numeric" autocomplete="off" placeholder="For example, 4480997136">
-          <p class="field-hint">Usually visible as <code>currentJobId=…</code> in the job URL.</p>
-        </div>
-        <div id="url-field" class="field-group" hidden>
-          <label for="job-url">LinkedIn job-post URL</label>
-          <input id="job-url" type="url" inputmode="url" autocomplete="url" placeholder="https://www.linkedin.com/jobs/view/…">
-          <p class="field-hint">The URL must contain a job ID, such as <code>currentJobId</code> or <code>/jobs/view/…</code>.</p>
+        <p class="muted">Enter a LinkedIn job ID or paste a job-post URL.</p>
+        <div class="field-group">
+          <label for="job-reference">LinkedIn job ID or URL</label>
+          <div class="reference-row">
+            <input id="job-reference" type="text" autocomplete="off" spellcheck="false" placeholder="Job ID or https://www.linkedin.com/jobs/view/…">
+            <button id="clear-job-reference" class="button button-secondary" type="button">Clear</button>
+          </div>
+          <p class="field-hint">The app recognizes a numeric job ID or a LinkedIn job-post URL.</p>
         </div>
         <button id="search-button" class="button button-primary button-wide" type="button">Find application answers</button>
         <p id="lookup-message" class="message" role="status" aria-live="polite"></p>

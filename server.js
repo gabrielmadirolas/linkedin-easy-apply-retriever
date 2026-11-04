@@ -2,12 +2,14 @@ import http from "node:http";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { createExport, recordMatchesJob } from "./exports.js";
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC = path.join(ROOT, "public");
 const API_DOMAINS = new Set(["JOB_APPLICATIONS", "TALENT_QUESTION_SAVED_RESPONSE"]);
 const TOKEN_KEY_PATTERN = /^LINKEDIN_ACCESS_TOKEN(?:_[A-Z0-9_]+)?$/i;
 const MAX_BODY = 64 * 1024;
+const MAX_EXPORT_BODY = 5 * 1024 * 1024;
 const MAX_COUNT = 100;
 const MAX_START = 1_000_000;
 const MAX_TOKEN_LENGTH = 10_000;
@@ -40,14 +42,14 @@ function requestOriginIsLocal(req) {
   return !origin || origin === `http://127.0.0.1:${serverPort}`;
 }
 
-function readJson(req) {
+function readJson(req, maxBytes = MAX_BODY) {
   return new Promise((resolve, reject) => {
     let data = "";
     let tooLarge = false;
     req.on("data", (chunk) => {
       if (tooLarge) return;
       data += chunk;
-      if (Buffer.byteLength(data) > MAX_BODY) {
+      if (Buffer.byteLength(data) > maxBytes) {
         tooLarge = true;
         data = "";
       }
@@ -151,7 +153,7 @@ const app = http.createServer(async (req, res) => {
 
   let input;
   try {
-    input = await readJson(req);
+    input = await readJson(req, url.pathname === "/api/export" ? MAX_EXPORT_BODY : MAX_BODY);
   } catch (error) {
     return sendJson(res, error.status || 400, { error: error.message || "Invalid request." });
   }
@@ -178,6 +180,34 @@ const app = http.createServer(async (req, res) => {
     accessToken = "";
     authNotice = "Disconnected. The app session token was cleared.";
     return sendJson(res, 200, statusPayload());
+  }
+
+  if (url.pathname === "/api/export") {
+    const jobId = typeof input.jobId === "string" ? input.jobId : "";
+    const format = typeof input.format === "string" ? input.format.toLowerCase() : "";
+    const records = input.records;
+    if (!/^\d{1,30}$/.test(jobId) || !Array.isArray(records) || records.length === 0 || records.length > 500) {
+      return sendJson(res, 400, { error: "Export request must contain a valid job ID and between 1 and 500 matching records." });
+    }
+    if (!records.every((record) => record && typeof record === "object" && !Array.isArray(record) && recordMatchesJob(record, jobId))) {
+      return sendJson(res, 400, { error: "Only records matched to the selected job can be exported." });
+    }
+    try {
+      const output = await createExport(format, jobId, records);
+      const filename = `linkedin-answers-${jobId}.${output.extension}`;
+      securityHeaders(res);
+      res.writeHead(200, {
+        "Content-Type": output.contentType,
+        "Content-Length": output.buffer.length,
+        "Content-Disposition": `attachment; filename="${filename}"`,
+        "Cache-Control": "no-store",
+        "X-Content-Type-Options": "nosniff",
+      });
+      return res.end(output.buffer);
+    } catch (error) {
+      const status = /supported export format/i.test(error.message) ? 400 : 500;
+      return sendJson(res, status, { error: status === 400 ? error.message : "Could not prepare that export. Try a smaller result or another format." });
+    }
   }
 
   if (url.pathname === "/api/snapshot") {

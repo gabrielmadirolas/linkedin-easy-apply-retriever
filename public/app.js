@@ -5,6 +5,7 @@ const lookupMessage = $("#lookup-message");
 const results = $("#results");
 let savedTokenOptions = [];
 let savedTokenPromptDismissed = false;
+let matchedRecords = [];
 
 function setMessage(node, message, kind = "") {
   node.textContent = message;
@@ -88,24 +89,16 @@ async function refreshStatus() {
 }
 
 function targetJobId() {
-  const mode = $("input[name='target-mode']:checked").value;
-  if (mode === "id") {
-    const id = $("#job-id").value.trim();
-    if (!/^\d+$/.test(id)) throw new Error("Enter a numeric LinkedIn job ID.");
-    return id;
-  }
-  const raw = $("#job-url").value.trim();
+  const raw = $("#job-reference").value.trim();
+  if (/^\d+$/.test(raw)) return raw;
   let url;
   try {
     url = new URL(raw);
   } catch {
-    throw new Error("Paste a complete LinkedIn job-post URL.");
-  }
-  if (!/(^|\.)linkedin\.com$/i.test(url.hostname) || !url.pathname.startsWith("/jobs/")) {
-    throw new Error("Use a LinkedIn URL whose path starts with /jobs/.");
+    throw new Error("Enter a numeric job ID or paste a complete LinkedIn job-post URL.");
   }
   const ids = jobIdsFromUrl(url);
-  if (ids.length !== 1) throw new Error("That URL has no single valid job ID. Use a LinkedIn job URL with one ID, or choose the Job ID option.");
+  if (ids.length !== 1) throw new Error("That LinkedIn URL must contain one valid job ID.");
   return ids[0];
 }
 
@@ -161,6 +154,46 @@ function recordJobIds(record) {
   return [...found];
 }
 
+function stableJson(value) {
+  if (Array.isArray(value)) return `[${value.map(stableJson).join(",")}]`;
+  if (value && typeof value === "object") {
+    return `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${stableJson(value[key])}`).join(",")}}`;
+  }
+  return JSON.stringify(value);
+}
+
+function applicationIdentity(record) {
+  const data = record?.data && typeof record.data === "object" ? record.data : record;
+  const identifiers = new Set();
+  const stack = [data];
+  const visited = new Set();
+  while (stack.length) {
+    const value = stack.pop();
+    if (!value || typeof value !== "object" || visited.has(value)) continue;
+    visited.add(value);
+    for (const [key, nested] of Object.entries(value)) {
+      const normalized = key.toLowerCase().replace(/[^a-z0-9]/g, "");
+      if (/^(applicationid|applicationrecordid|jobapplicationid|jobapplicationrecordid)$/.test(normalized)
+        && (typeof nested === "string" || (typeof nested === "number" && Number.isSafeInteger(nested)))) {
+        identifiers.add(String(nested));
+      } else if (nested && typeof nested === "object") {
+        stack.push(nested);
+      }
+    }
+  }
+  return identifiers.size ? `application:${[...identifiers].sort().join("|")}` : `record:${stableJson(data)}`;
+}
+
+function uniqueApplications(records) {
+  const seen = new Set();
+  return records.filter((record) => {
+    const identity = applicationIdentity(record);
+    if (seen.has(identity)) return false;
+    seen.add(identity);
+    return true;
+  });
+}
+
 function snapshotRecords(payload, domain) {
   if (!payload || typeof payload !== "object" || !Array.isArray(payload.elements)) {
     throw new Error(`LinkedIn returned an unexpected response format for ${domain}. Check API access/version and try again.`);
@@ -209,87 +242,208 @@ async function fetchDomain(domain) {
   throw new Error(`Stopped ${domain} pagination after 200 pages to avoid an unbounded request.`);
 }
 
-function addResultCard(container, title, subtitle, record, index) {
+function humanizeFieldKey(key) {
+  return String(key)
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .replace(/[_-]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/\b\w/g, (character) => character.toUpperCase());
+}
+
+function parseQuestionsAndAnswers(value) {
+  const text = String(value);
+  if (!text.includes("|")) return [];
+  const entries = text.split(/\s*\|\s*/).map((entry) => entry.trim()).filter(Boolean);
+  const pairs = entries.map((entry) => {
+    const separator = entry.indexOf(":");
+    if (separator < 0) return null;
+    return { question: entry.slice(0, separator).trim(), answer: entry.slice(separator + 1).trim() };
+  });
+  return pairs.length && pairs.every(Boolean) ? pairs : [];
+}
+
+function finishAnswer(value) {
+  const answer = String(value).replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\uFFFE\uFFFF]/g, "�").trimEnd();
+  if (!answer || /[.!?]$/.test(answer) || /^\d+(?:[.,]\d+)?$/.test(answer)
+    || /^\+?[\d\s().-]+$/.test(answer) || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(answer)
+    || /^(?:https?:\/\/|www\.)/i.test(answer) || /\.(?:pdf|docx?|odt|rtf|txt)$/i.test(answer)) return answer;
+  return `${answer}.`;
+}
+
+function readableFields(record) {
+  const root = record?.data && typeof record.data === "object" ? record.data : record;
+  const fields = [];
+  function visit(value, path, seen = new Set()) {
+    if (value === null || value === undefined) return;
+    if (typeof value === "object") {
+      if (seen.has(value)) return;
+      seen.add(value);
+      if (Array.isArray(value)) {
+        value.forEach((item, index) => visit(item, [...path, String(index + 1)], seen));
+      } else {
+        for (const [key, nested] of Object.entries(value)) visit(nested, [...path, key], seen);
+      }
+      seen.delete(value);
+      return;
+    }
+    if (typeof value === "string" && path.length) {
+      const pairs = parseQuestionsAndAnswers(value);
+      if (pairs.length) {
+        for (const pair of pairs) {
+          fields.push({ label: pair.question || "Answer", value: finishAnswer(pair.answer), kind: "answer", order: fields.length });
+        }
+        return;
+      }
+    }
+    const label = path.map(humanizeFieldKey).join(" · ") || "Value";
+    const leafKey = String(path.at(-1) || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+    const inQuestionsAndAnswers = path.slice(0, -1).some((part) => /questionsandanswers|questionanswers/.test(String(part).toLowerCase().replace(/[^a-z0-9]/g, "")));
+    const isAnswer = /answer|response|selected|choice/.test(leafKey) || (inQuestionsAndAnswers && /^\d+$/.test(leafKey));
+    const kind = isAnswer ? "answer" : /question|prompt/.test(leafKey) ? "question" : "detail";
+    const displayValue = kind === "answer" ? finishAnswer(value) : String(value).replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\uFFFE\uFFFF]/g, "�").trimEnd();
+    fields.push({ label, value: displayValue, kind, order: fields.length });
+  }
+  visit(root, []);
+  const rank = { question: 0, answer: 0, detail: 1 };
+  return fields.sort((left, right) => rank[left.kind] - rank[right.kind] || left.order - right.order);
+}
+
+function addResultCard(container, type, record, index) {
   const card = document.createElement("article");
   card.className = "result-card";
   const heading = document.createElement("h3");
-  heading.textContent = title;
-  const copy = document.createElement("button");
-  copy.className = "button button-secondary result-copy";
-  copy.type = "button";
-  copy.textContent = "Copy JSON";
-  const pre = document.createElement("pre");
-  pre.className = "result-json";
-  pre.textContent = JSON.stringify(record, null, 2);
-  copy.addEventListener("click", async () => {
-    try {
-      await navigator.clipboard.writeText(pre.textContent);
-      copy.textContent = "Copied";
-      setTimeout(() => { copy.textContent = "Copy JSON"; }, 1200);
-    } catch {
-      copy.textContent = "Copy unavailable";
-    }
-  });
-  const description = document.createElement("p");
-  description.className = "result-subtitle";
-  description.textContent = subtitle || `Record ${index + 1}`;
-  card.append(heading, copy, description, pre);
+  heading.textContent = `${type} ${index + 1}`;
+  const fields = readableFields(record);
+  if (!fields.length) {
+    const empty = document.createElement("p");
+    empty.className = "muted";
+    empty.textContent = "This matching record has no readable fields.";
+    card.append(heading, empty);
+    container.append(card);
+    return;
+  }
+  const list = document.createElement("dl");
+  list.className = "result-fields";
+  for (const field of fields) {
+    const row = document.createElement("div");
+    row.className = `result-field ${field.kind}`;
+    const label = document.createElement("dt");
+    label.textContent = field.label;
+    const value = document.createElement("dd");
+    value.textContent = field.value;
+    row.append(label, value);
+    list.append(row);
+  }
+  card.append(heading, list);
   container.append(card);
 }
 
 function renderResults(jobId, applications, responses) {
   results.replaceChildren();
   results.hidden = false;
-  const applicationMatches = applications.filter((record) => recordJobIds(record).includes(jobId));
+  matchedRecords = [];
+  const applicationMatches = uniqueApplications(applications.filter((record) => recordJobIds(record).includes(jobId)));
   const responseMatches = responses.filter((record) => recordJobIds(record).includes(jobId));
-  const otherResponses = responses.filter((record) => !recordJobIds(record).includes(jobId));
 
   const header = document.createElement("div");
   header.className = "results-header";
   const text = document.createElement("div");
   const title = document.createElement("h2");
-  title.textContent = `Results for job ${jobId}`;
+  title.textContent = `Matching results for job ${jobId}`;
   const detail = document.createElement("p");
-  detail.textContent = `${applications.length} application records · ${responses.length} saved screening response records returned`;
+  const count = applicationMatches.length + responseMatches.length;
+  detail.textContent = `${count} matching ${count === 1 ? "record" : "records"}`;
   text.append(title, detail);
   header.append(text);
   results.append(header);
 
   const allMatches = [
     ...applicationMatches.map((record) => ({ type: "Application record", record })),
-    ...responseMatches.map((record) => ({ type: "Screening response linked by job ID", record })),
+    ...responseMatches.map((record) => ({ type: "Screening response", record })),
   ];
-  if (allMatches.length) {
-    for (const [index, match] of allMatches.entries()) addResultCard(results, match.type, `Matched job ID ${jobId}`, match.record, index);
-  } else {
+  matchedRecords = allMatches.map(({ type, record }) => ({ ...record, resultType: type }));
+  if (!allMatches.length) {
     const empty = document.createElement("div");
     empty.className = "empty-state";
-    empty.textContent = "No returned record contained this job ID. The API may not associate historical saved answers with a specific application. Review the unassociated saved responses below.";
+    empty.textContent = "No application or saved screening response was matched to this job.";
     results.append(empty);
+    return;
   }
 
-  const otherHeading = document.createElement("div");
-  otherHeading.className = "results-header";
-  const otherTitle = document.createElement("h2");
-  otherTitle.textContent = `Saved responses not matched to job ${jobId}`;
-  const otherDetail = document.createElement("p");
-  otherDetail.textContent = otherResponses.length
-    ? "These may not be tied to the target job. They are shown for inspection, not as confirmed application answers."
-    : "No unmatched saved responses were returned.";
-  otherHeading.append(otherTitle, otherDetail);
-  results.append(otherHeading);
-  if (otherResponses.length) {
-    otherResponses.forEach((record, index) => {
-      const ids = recordJobIds(record);
-      const subtitle = ids.length ? `Contains other job reference(s): ${ids.join(", ")}` : "No job ID found in this record; association is unknown.";
-      addResultCard(results, "Unmatched saved screening response", subtitle, record, index);
+  const exportPanel = document.createElement("div");
+  exportPanel.className = "result-export";
+  const formatLabel = document.createElement("label");
+  const formatSelect = document.createElement("select");
+  formatSelect.id = "export-format";
+  formatLabel.htmlFor = formatSelect.id;
+  formatLabel.textContent = "Save matching results as";
+  const formats = [
+    ["pdf", "PDF"],
+    ["docx", "DOCX (Word)"],
+    ["txt", "TXT"],
+    ["odt", "ODT (OpenDocument)"],
+    ["json", "JSON"],
+    ["html", "HTML"],
+  ];
+  for (const [value, label] of formats) {
+    const option = document.createElement("option");
+    option.value = value;
+    option.textContent = label;
+    option.selected = value === "txt";
+    formatSelect.append(option);
+  }
+  const exportButton = document.createElement("button");
+  exportButton.className = "button button-primary";
+  exportButton.type = "button";
+  exportButton.textContent = "Download";
+  exportButton.addEventListener("click", () => downloadResults(jobId, formatSelect.value, exportButton));
+  exportPanel.append(formatLabel, formatSelect, exportButton);
+  results.append(exportPanel);
+
+  const typeCounts = new Map();
+  for (const match of allMatches) {
+    const index = typeCounts.get(match.type) || 0;
+    typeCounts.set(match.type, index + 1);
+    addResultCard(results, match.type, match.record, index);
+  }
+}
+
+async function downloadResults(jobId, format, button) {
+  button.disabled = true;
+  setMessage(lookupMessage, "Preparing your file…");
+  try {
+    const response = await fetch("/api/export", {
+      method: "POST",
+      cache: "no-store",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ jobId, format, records: matchedRecords }),
     });
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      throw new Error(error.error || `Export failed (${response.status}).`);
+    }
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `linkedin-answers-${jobId}.${format}`;
+    document.body.append(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    setMessage(lookupMessage, `Downloaded matching results as ${format.toUpperCase()}.`, "success");
+  } catch (error) {
+    setMessage(lookupMessage, error.message, "error");
+  } finally {
+    button.disabled = false;
   }
 }
 
 async function runLookup() {
   setMessage(lookupMessage, "");
   results.hidden = true;
+  matchedRecords = [];
   let jobId;
   try {
     jobId = targetJobId();
@@ -355,6 +509,7 @@ $("#disconnect-button").addEventListener("click", async () => {
   try {
     setAuthStatus(await api("/api/logout", { method: "POST", body: "{}" }));
     $("#token-input").value = "";
+    matchedRecords = [];
     results.replaceChildren();
     results.hidden = true;
   } catch (error) {
@@ -364,13 +519,14 @@ $("#disconnect-button").addEventListener("click", async () => {
 
 $("#search-button").addEventListener("click", runLookup);
 
-for (const radio of document.querySelectorAll("input[name='target-mode']")) {
-  radio.addEventListener("change", () => {
-    const urlMode = radio.checked && radio.value === "url";
-    $("#id-field").hidden = urlMode;
-    $("#url-field").hidden = !urlMode;
-    setMessage(lookupMessage, "");
-  });
-}
+$("#clear-job-reference").addEventListener("click", () => {
+  const input = $("#job-reference");
+  input.value = "";
+  input.focus();
+  matchedRecords = [];
+  results.replaceChildren();
+  results.hidden = true;
+  setMessage(lookupMessage, "");
+});
 
 refreshStatus();
